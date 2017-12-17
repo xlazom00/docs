@@ -47,7 +47,12 @@ static int modeset_open(int *out, const char *node);
 static int modeset_prepare(int fd);
 static void modeset_draw(int fd);
 static void modeset_draw_dev(int fd, struct modeset_dev *dev);
+static void modeset_draw_dev2(int fd, struct modeset_dev *dev);
 static void modeset_cleanup(int fd);
+
+int x_offset = 0;
+int y_offset = 0;
+
 
 /*
  * modeset_open() stays the same.
@@ -490,7 +495,7 @@ static void modeset_page_flip_event(int fd, unsigned int frame,
 
 	dev->pflip_pending = false;
 	if (!dev->cleanup)
-		modeset_draw_dev(fd, dev);
+		modeset_draw_dev2(fd, dev);
 }
 
 /*
@@ -571,7 +576,7 @@ static void modeset_draw(int fd)
 		iter->b = rand() % 0xff;
 		iter->r_up = iter->g_up = iter->b_up = true;
 
-		modeset_draw_dev(fd, iter);
+		modeset_draw_dev2(fd, iter);
 	}
 
 	/* wait 5s for VBLANK or input events */
@@ -677,6 +682,69 @@ static void modeset_draw_dev(int fd, struct modeset_dev *dev)
 		dev->pflip_pending = true;
 	}
 }
+
+static void modeset_draw_dev2(int fd, struct modeset_dev *dev)
+{
+//	modeset_draw_dev( fd, dev );
+//	return;
+	struct modeset_buf *buf;
+	unsigned int j, k, off;
+	int ret;
+	unsigned int window_width;
+	unsigned int window_height;
+
+	dev->r = next_color(&dev->r_up, dev->r, 20);
+	dev->g = next_color(&dev->g_up, dev->g, 10);
+	dev->b = next_color(&dev->b_up, dev->b, 5);
+
+	buf = &dev->bufs[dev->front_buf ^ 1];
+
+	window_width = (buf->width >> 1) - 1;
+	window_height = (buf->height >> 1) - 1;
+
+	if ( y_offset >= window_height ) {
+	    y_offset = 0;
+	}
+
+	if ( x_offset == 0 ) {
+	    x_offset = window_width;
+	}
+
+//	fprintf(stderr, "y_offset:%u x_offset;%u stride:%u \n", y_offset, x_offset, buf->stride);
+
+	memset( buf->map, 0x00, buf->height* buf->width * 4 );
+
+	for( j = y_offset ; j < (window_height + y_offset); ++j) {
+	    for (k = x_offset; k < (window_width + x_offset); ++k) {
+		off = buf->stride * j + k * 4;
+		*(uint32_t*)&buf->map[off] = 0xff0000;
+	    }
+	}
+
+//	for (j = 0; j < buf->height; ++j) {
+//		for (k = 0; k < buf->width; ++k) {
+//			off = buf->stride * j + k * 4;
+//			*(uint32_t*)&buf->map[off] =
+//				     (dev->r << 16) | (dev->g << 8) | dev->b;
+//		}
+//	}
+
+	x_offset -= 1;
+	y_offset += 1;
+
+	ret = drmModePageFlip(fd, dev->crtc, buf->fb,
+			      DRM_MODE_PAGE_FLIP_EVENT, dev);
+	if (ret) {
+		fprintf(stderr, "cannot flip CRTC for connector %u (%d): %m\n",
+			dev->conn, errno);
+	} else {
+		dev->front_buf ^= 1;
+		dev->pflip_pending = true;
+	}
+}
+
+
+
 
 /*
  * modeset_cleanup() stays mostly the same. However, before resetting a CRTC to
