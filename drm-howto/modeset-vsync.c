@@ -52,6 +52,7 @@ static void modeset_cleanup(int fd);
 
 int x_offset = 0;
 int y_offset = 0;
+int step = 10;
 
 
 /*
@@ -580,10 +581,10 @@ static void modeset_draw(int fd)
 	}
 
 	/* wait 5s for VBLANK or input events */
-	while (time(&cur) < start + 5) {
+	while (time(&cur) < start + 15) {
 		FD_SET(0, &fds);
 		FD_SET(fd, &fds);
-		v.tv_sec = start + 5 - cur;
+		v.tv_sec = start + 15 - cur;
 
 		ret = select(fd + 1, &fds, NULL, NULL, &v);
 		if (ret < 0) {
@@ -706,7 +707,7 @@ static void modeset_draw_dev2(int fd, struct modeset_dev *dev)
 	    y_offset = 0;
 	}
 
-	if ( x_offset == 0 ) {
+	if ( x_offset <= 0 ) {
 	    x_offset = window_width;
 	}
 
@@ -729,8 +730,8 @@ static void modeset_draw_dev2(int fd, struct modeset_dev *dev)
 //		}
 //	}
 
-	x_offset -= 1;
-	y_offset += 1;
+	x_offset -= step;
+	y_offset += step;
 
 	ret = drmModePageFlip(fd, dev->crtc, buf->fb,
 			      DRM_MODE_PAGE_FLIP_EVENT, dev);
